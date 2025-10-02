@@ -1,38 +1,42 @@
-import React from 'react';
-import { DiffLine, DiffType } from '../types';
+import React, { useMemo } from 'react';
+import { DiffLine, DiffType, Match } from '../types';
 
 declare const Prism: any;
 
 interface EditorPanelProps {
+  id: string;
   title: string;
   onTitleChange: (newTitle: string) => void;
   text: string;
   onTextChange: (newText: string) => void;
   diffResult: DiffLine[] | null;
   scrollRef: (element: HTMLDivElement | null) => void;
-  onScroll: (scrollTop: number) => void;
+  onScroll: (id: string, scrollTop: number, scrollLeft: number) => void;
   className?: string;
+  isSyncing?: boolean;
+  matches: Match[];
+  activeMatch?: Match;
 }
 
-const getLineClass = (type: DiffType): string => {
+const getLineStyle = (type: DiffType): React.CSSProperties => {
   switch (type) {
     case DiffType.Added:
-      return 'bg-green-500 bg-opacity-20';
+      return { backgroundColor: 'var(--color-diff-add-bg)' };
     case DiffType.Removed:
-      return 'bg-red-500 bg-opacity-20';
+      return { backgroundColor: 'var(--color-diff-remove-bg)' };
     default:
-      return '';
+      return {};
   }
 };
 
 const getLineSymbolClass = (type: DiffType): string => {
   switch (type) {
     case DiffType.Added:
-      return 'text-green-400';
+      return 'text-[var(--color-diff-add-text)]';
     case DiffType.Removed:
-      return 'text-red-400';
+      return 'text-[var(--color-diff-remove-text)]';
     default:
-      return 'text-gray-600';
+      return 'text-transparent'; // Use transparent for unchanged lines instead of muted color
   }
 }
 
@@ -48,7 +52,48 @@ const getLanguageFromTitle = (title: string): string => {
     return 'javascript'; // Default language
 };
 
+const HighlightOverlay: React.FC<{ text: string, matches: Match[], activeMatch?: Match }> = ({ text, matches, activeMatch }) => {
+    const sortedMatches = useMemo(() => [...matches].sort((a, b) => a.start - b.start), [matches]);
+
+    if (matches.length === 0) {
+        return <>{text}</>;
+    }
+    
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+
+    sortedMatches.forEach((match, i) => {
+        // Add text before the match
+        if (match.start > lastIndex) {
+            parts.push(text.substring(lastIndex, match.start));
+        }
+
+        const isMatchActive = activeMatch && activeMatch.start === match.start && activeMatch.end === match.end;
+        const style = {
+            backgroundColor: isMatchActive ? 'var(--color-find-active-match-bg)' : 'var(--color-find-match-bg)',
+            borderRadius: '2px',
+        };
+
+        // Add the highlighted match
+        parts.push(
+            <mark key={i} style={style}>
+                {text.substring(match.start, match.end)}
+            </mark>
+        );
+
+        lastIndex = match.end;
+    });
+
+    // Add any remaining text after the last match
+    if (lastIndex < text.length) {
+        parts.push(text.substring(lastIndex));
+    }
+
+    return <>{parts}</>;
+};
+
 export const EditorPanel: React.FC<EditorPanelProps> = ({ 
+  id,
   title, 
   onTitleChange, 
   text, 
@@ -56,13 +101,16 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   diffResult, 
   scrollRef, 
   onScroll,
-  className = ''
+  className = '',
+  isSyncing = false,
+  matches,
+  activeMatch
 }) => {
   const language = getLanguageFromTitle(title);
   const isBasePanel = !diffResult;
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    onScroll(e.currentTarget.scrollTop);
+    onScroll(id, e.currentTarget.scrollTop, e.currentTarget.scrollLeft);
   };
 
   const renderContent = () => {
@@ -94,8 +142,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         const symbol = isAdded ? '+' : isRemoved ? '-' : ' ';
 
         return (
-            <div key={i} className={`flex items-start min-h-[24px] ${getLineClass(line.type)}`}>
-                <div className="flex-shrink-0 flex pr-4 text-gray-500 select-none">
+            <div key={i} className="flex items-start min-h-[24px]" style={getLineStyle(line.type)}>
+                <div className="flex-shrink-0 flex pr-4 text-[var(--color-text-muted)] select-none">
                     <span className="w-8 text-right">
                         {isBasePanel ? baseLineNum : (isUnchanged || isRemoved ? baseLineNum : '')}
                     </span>
@@ -103,45 +151,60 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
                         {isBasePanel ? '' : (isUnchanged || isAdded ? currentLineNum : '')}
                     </span>
                 </div>
-                <span className={`w-4 flex-shrink-0 text-center select-none ${isBasePanel ? 'text-gray-500' : getLineSymbolClass(line.type)}`}>
-                    {isBasePanel ? '' : symbol}
+                <span className={`w-4 flex-shrink-0 text-center select-none ${isBasePanel ? 'text-transparent' : getLineSymbolClass(line.type)}`}>
+                    {isBasePanel ? ' ' : symbol}
                 </span>
-                <pre className="flex-grow m-0 p-0 bg-transparent" aria-hidden="true">
+                <div className="flex-grow" aria-hidden="true">
                     <code 
                         className={`language-${language}`} 
                         dangerouslySetInnerHTML={{ __html: highlightedHtml }} 
                     />
-                </pre>
+                </div>
             </div>
         );
     });
   };
 
   return (
-    <div className={`flex flex-col bg-gray-800 border border-gray-700 rounded-lg overflow-hidden h-full min-h-0 ${className}`}>
-      <div className="bg-gray-700 px-4 py-2 text-white flex-shrink-0">
+    <div className={`relative flex flex-col bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg overflow-hidden h-full min-h-0 ${className}`}>
+      {isSyncing && (
+        <div className="absolute inset-0 bg-transparent pointer-events-none z-30 animate-pulse-sync"></div>
+      )}
+      <div className="bg-[var(--color-bg-tertiary)] px-4 py-2 text-[var(--color-text-primary)] flex-shrink-0 border-b border-[var(--color-border)]">
         <input
             type="text"
             value={title}
             onChange={(e) => onTitleChange(e.target.value)}
-            className="bg-transparent font-semibold text-white w-full border-none outline-none focus:ring-1 focus:ring-cyan-500 rounded-sm px-1 -mx-1"
+            className="bg-transparent font-semibold text-[var(--color-text-primary)] w-full border-none outline-none focus:ring-1 focus:ring-[var(--color-accent)] rounded-sm px-1 -mx-1"
             aria-label="Panel Title"
         />
       </div>
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
-        className="relative flex-1 code-font text-sm leading-6 overflow-auto"
+        className="flex-1 overflow-auto code-font text-sm leading-6"
       >
-        <div className="absolute top-0 left-0 p-2 pl-4 w-full whitespace-pre pointer-events-none">
-          {renderContent()}
+        <div className="relative grid">
+            <div
+                className="col-start-1 row-start-1 z-0 p-2 whitespace-pre pointer-events-none"
+                aria-hidden="true"
+            >
+                {renderContent()}
+            </div>
+            <div
+                className="col-start-1 row-start-1 z-10 p-2 pl-28 whitespace-pre pointer-events-none text-transparent"
+                aria-hidden="true"
+            >
+                <HighlightOverlay text={text} matches={matches} activeMatch={activeMatch} />
+            </div>
+            <textarea
+              value={text}
+              onChange={(e) => onTextChange(e.target.value)}
+              spellCheck="false"
+              className="col-start-1 row-start-1 z-20 w-full h-full p-2 pl-28 bg-transparent text-transparent caret-[var(--color-caret)] resize-none border-none outline-none whitespace-pre"
+              wrap="off"
+            />
         </div>
-        <textarea
-          value={text}
-          onChange={(e) => onTextChange(e.target.value)}
-          spellCheck="false"
-          className="absolute top-0 left-0 block w-full h-full p-2 pr-2 pl-[8.5rem] bg-transparent text-transparent caret-white resize-none border-none outline-none code-font text-sm leading-6 whitespace-pre"
-        />
       </div>
     </div>
   );

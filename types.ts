@@ -1,4 +1,3 @@
-
 export enum DiffType {
   Unchanged = 'unchanged',
   Added = 'added',
@@ -17,3 +16,16 @@ export interface PanelData {
 }
 
 export type ThreePanelLayout = 'stacked' | 'side-by-side';
+
+export type EditorTheme = 'dark' | 'light' | 'solarized';
+
+export interface Match {
+  panelId: string;
+  start: number;
+  end: number;
+}
+
+export interface FindOptions {
+  caseSensitive: boolean;
+  useRegex: boolean;
+}
