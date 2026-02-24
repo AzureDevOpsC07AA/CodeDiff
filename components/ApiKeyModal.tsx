@@ -36,7 +36,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onClose, onSave, curre
           </button>
         </div>
         <p className="text-sm text-[var(--color-text-secondary)] mb-4">
-          To use the AI summary feature, please provide your Google Gemini API key. Your key will be stored securely in your browser's local storage.
+          To use the AI summary feature, please provide your Google Gemini API key. Your key will be used only in this session and will not be stored in your browser.
         </p>
         <input
           type="password"

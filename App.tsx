@@ -38,8 +38,8 @@ const App: React.FC = () => {
     // Help Modal State
     const [isHelpVisible, setIsHelpVisible] = useState(false);
 
-    // API Key State
-    const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('gemini_api_key') || '');
+    // API Key State (kept only in memory for the current session)
+    const [apiKey, setApiKey] = useState<string>('');
     const [isApiKeyModalVisible, setIsApiKeyModalVisible] = useState<boolean>(false);
 
     const panelScrollRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -197,8 +197,8 @@ const App: React.FC = () => {
     const toggleHelpModal = useCallback(() => setIsHelpVisible(v => !v), []);
 
     const handleSaveApiKey = (key: string) => {
+        // Store API key only in memory for this session; do not persist to localStorage.
         setApiKey(key);
-        localStorage.setItem('gemini_api_key', key);
     };
 
     // Keyboard Shortcuts Effect
